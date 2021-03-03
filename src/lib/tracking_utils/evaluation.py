@@ -2,7 +2,7 @@ import os
 import numpy as np
 import copy
 import motmetrics as mm
-mm.lap.default_solver = 'lap'
+mm.lap.default_solver = 'scipy'
 
 from tracking_utils.io import read_results, unzip_objs
 

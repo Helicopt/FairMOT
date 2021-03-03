@@ -1,5 +1,5 @@
 {
-    "root":"/data/yfzhang/MOT/JDE",
+    "root":"/mnt/lustre/share/fengweitao",
     "train":
     {
         "crowdhuman_train":"./data/crowdhuman.train",

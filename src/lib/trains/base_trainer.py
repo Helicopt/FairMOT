@@ -3,6 +3,8 @@ from __future__ import division
 from __future__ import print_function
 
 import time
+from typing import List
+from numpy.lib.arraysetops import isin
 import torch
 from progress.bar import Bar
 from models.data_parallel import DataParallel
@@ -64,10 +66,22 @@ class BaseTrainer(object):
         break
       data_time.update(time.time() - end)
 
+      def wrap2device(d, device='cuda'):
+        if isinstance(d, torch.Tensor):
+          return d.to(device=device, non_blocking=True)
+        if isinstance(d, list):
+          return [wrap2device(i, device=device) for i in d]
+        if isinstance(d, tuple):
+          return tuple(wrap2device(i, device=device) for i in d)
+        if isinstance(d, dict):
+          return {k: wrap2device(i, device=device) for k, i in d.items()}
+        assert 0, 'unknown type %s' % type(d)
+        
+
       for k in batch:
         if k != 'meta':
-          batch[k] = batch[k].to(device=opt.device, non_blocking=True)
-
+          batch[k] = wrap2device(batch[k], device=opt.device)
+      batch_size = batch['input'].size(0) if isinstance(batch['input'], torch.Tensor) else batch['input'][0].size(0)
       output, loss, loss_stats = model_with_loss(batch)
       loss = loss.mean()
       if phase == 'train':
@@ -82,7 +96,7 @@ class BaseTrainer(object):
         total=bar.elapsed_td, eta=bar.eta_td)
       for l in avg_loss_stats:
         avg_loss_stats[l].update(
-          loss_stats[l].mean().item(), batch['input'].size(0))
+          loss_stats[l].mean().item(), batch_size)
         Bar.suffix = Bar.suffix + '|{} {:.4f} '.format(l, avg_loss_stats[l].avg)
       if not opt.hide_data_time:
         Bar.suffix = Bar.suffix + '|Data {dt.val:.3f}s({dt.avg:.3f}s) ' \

@@ -14,6 +14,7 @@ import torch.nn.functional as F
 import torch.utils.model_zoo as model_zoo
 
 from dcn_v2 import DCN
+from .rel_mod import BaseRelMod as RelMod
 
 BN_MOMENTUM = 0.1
 logger = logging.getLogger(__name__)
@@ -435,6 +436,8 @@ class DLASeg(nn.Module):
         channels = self.base.channels
         scales = [2 ** i for i in range(len(channels[self.first_level:]))]
         self.dla_up = DLAUp(self.first_level, channels[self.first_level:], scales)
+        self.rel_mod_det = RelMod(in_channels=64, feat_dim=64, stages=2)
+        self.rel_mod_id = RelMod(in_channels=64, feat_dim=64, stages=2)
 
         if out_channel == 0:
             out_channel = channels[self.first_level]
@@ -467,7 +470,7 @@ class DLASeg(nn.Module):
                 fill_fc_weights(fc)
             self.__setattr__(head, fc)
 
-    def forward(self, x):
+    def features(self, x):
         x = self.base(x)
         x = self.dla_up(x)
 
@@ -475,11 +478,31 @@ class DLASeg(nn.Module):
         for i in range(self.last_level - self.first_level):
             y.append(x[i].clone())
         self.ida_up(y, 0, len(y))
+        return y
 
-        z = {}
+    def forward(self, input):
+        x, ref = input
+        y = self.features(x)
+        if self.training:
+            ref = ref.detach()
+            bs, rep, c, h, w = ref.shape
+            ref = ref.view(bs * rep, c, h, w)
+            with torch.no_grad():
+                ref = self.features(ref)[-1]
+        ry = y[-1]
+        det_y, affs = self.rel_mod_det(ry, ref)
+        id_y, affs = self.rel_mod_id(ry, ref)
+        mappings = {
+            'hm': det_y,
+            'wh': det_y,
+            'reg': det_y,
+            'id': id_y,
+        }
+
+        z = {'raw': ry}
         for head in self.heads:
-            z[head] = self.__getattr__(head)(y[-1])
-            # print('%s: (%d %d %d %d)'%(head, *z[head].shape))
+            y = mappings[head]
+            z[head] = self.__getattr__(head)(y)
         return [z]
     
 
