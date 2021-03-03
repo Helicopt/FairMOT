@@ -198,9 +198,9 @@ class opts(object):
     opt.debug_dir = os.path.join(opt.save_dir, 'debug')
     print('The output will be saved to ', opt.save_dir)
     
-    if opt.resume and opt.load_model == '':
-      model_path = opt.save_dir[:-4] if opt.save_dir.endswith('TEST') \
-                  else opt.save_dir
+    model_path = opt.save_dir[:-4] if opt.save_dir.endswith('TEST') \
+                else opt.save_dir
+    if opt.resume and (opt.load_model == '' or os.path.exists(os.path.join(model_path, 'model_last.pth'))):
       opt.load_model = os.path.join(model_path, 'model_last.pth')
     return opt
 
